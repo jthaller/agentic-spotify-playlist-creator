@@ -110,6 +110,10 @@ Your token is cached to `.spotify_cache` so you won't need to log in again on re
 4. Watch Gemini make tool calls in real time
 5. Click **Open in Spotify** — your playlist is live!
 
+![Playlist input form](readme_img/prompt_input.png)
+
+![Playlist result](readme_img/final_output.png)
+
 ---
 
 ## Logging
