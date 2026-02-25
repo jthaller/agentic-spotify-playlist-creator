@@ -24,5 +24,9 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-pro"
     agent_max_iterations: int = 10
 
+    allowed_emails: list[str] = []
+    # Empty list = open access (default). Set to your Spotify account email(s) to lock down.
+    # In .env:  ALLOWED_EMAILS=you@example.com,friend@example.com
+
 
 settings = Settings()

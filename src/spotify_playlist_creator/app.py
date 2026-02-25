@@ -497,6 +497,14 @@ def main() -> None:
     # State 3: Valid token — show app
     sp = _initialize_spotify(token_info)
     user_profile, listening_context = _load_user_data(sp)
+
+    # Allowlist check — runs after OAuth but before any Gemini call
+    allowed = settings.allowed_emails
+    if allowed and user_profile.email not in allowed:
+        st.error("This app is private. Your Spotify account is not on the access list.")
+        logger.warning("Access denied for Spotify email: {}", user_profile.email)
+        st.stop()
+
     _render_main(sp, user_profile, listening_context)
 
 
