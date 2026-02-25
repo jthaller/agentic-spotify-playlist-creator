@@ -84,7 +84,7 @@ def _try_get_cached_token() -> dict | None:
 def _render_auth_page() -> None:
     st.title("🎵 Spotify Playlist Creator")
     st.markdown(
-        "Describe any playlist in natural language and let Claude build it for you — "
+        "Describe any playlist in natural language and let Geminie build it for you — "
         "powered by the Spotify API."
     )
     st.divider()
@@ -174,8 +174,8 @@ def _render_playlist(playlist: Playlist, agent_result: AgentResult) -> None:
 
     st.markdown(f"*{playlist.description}*" if playlist.description else "")
 
-    # How Claude built this
-    with st.expander("How Claude built this playlist", expanded=False):
+    # How Geminie built this
+    with st.expander("How Geminie built this playlist", expanded=False):
         st.markdown("### Reasoning")
         st.markdown(agent_result.reasoning_summary)
 
@@ -282,7 +282,7 @@ def _render_main(
             status_placeholder.info(msg)
 
         try:
-            with st.spinner("Claude is building your playlist..."):
+            with st.spinner("Geminie is building your playlist..."):
                 agent_result, playlist = planner.create_playlist(
                     request=request,
                     user_profile=user_profile,

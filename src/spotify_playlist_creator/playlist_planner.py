@@ -6,7 +6,7 @@ from typing import Callable
 
 import spotipy
 
-from .anthropic_agent import PlaylistAgent
+from .gemini_agent import PlaylistAgent
 from .models import AgentResult, Playlist, PlaylistRequest, UserListeningContext, UserProfile
 from .spotify_client import SpotifyClient
 
@@ -31,7 +31,7 @@ class PlaylistPlanner:
         listening_context: UserListeningContext,
         progress_callback: Callable[[str], None] | None = None,
     ) -> tuple[AgentResult, Playlist]:
-        # Run the Claude agent loop
+        # Run the Geminie agent loop
         agent_result = self._agent.run(
             request=request,
             user_profile=user_profile,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 logger = logging.getLogger(__name__)
@@ -317,18 +318,26 @@ class PlaylistAgent:
                         iterations_used=iteration,
                     )
 
-            # Dispatch all other tool calls and collect responses
+            # Dispatch all tool calls in parallel
+            calls = [(part.function_call.name, dict(part.function_call.args))
+                     for part in function_call_parts]
+
+            if progress_callback:
+                names = ", ".join(name for name, _ in calls)
+                progress_callback(f"Calling tools: {names}")
+
+            results: dict[int, str] = {}
+            with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+                futures = {
+                    pool.submit(self._dispatch_tool, name, inputs): i
+                    for i, (name, inputs) in enumerate(calls)
+                }
+                for future in as_completed(futures):
+                    results[futures[future]] = future.result()
+
             response_parts: list[types.Part] = []
-            for part in function_call_parts:
-                fc = part.function_call
-                tool_name = fc.name
-                tool_input = dict(fc.args)
-
-                if progress_callback:
-                    progress_callback(f"Calling tool: {tool_name}")
-
-                result_str = self._dispatch_tool(tool_name, tool_input)
-
+            for i, (tool_name, tool_input) in enumerate(calls):
+                result_str = results[i]
                 tool_calls_log.append(
                     ToolCall(
                         tool_name=tool_name,
@@ -337,8 +346,6 @@ class PlaylistAgent:
                         iteration=iteration,
                     )
                 )
-
-                # Parse result back to dict for Gemini's FunctionResponse
                 try:
                     result_data = json.loads(result_str)
                 except Exception:
