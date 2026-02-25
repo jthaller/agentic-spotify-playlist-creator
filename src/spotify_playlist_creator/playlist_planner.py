@@ -31,7 +31,7 @@ class PlaylistPlanner:
         listening_context: UserListeningContext,
         progress_callback: Callable[[str], None] | None = None,
     ) -> tuple[AgentResult, Playlist]:
-        # Run the Geminie agent loop
+        # Run the Gemini agent loop
         agent_result = self._agent.run(
             request=request,
             user_profile=user_profile,

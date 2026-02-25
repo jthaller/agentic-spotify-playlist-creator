@@ -1,1 +1,1 @@
-"""Agentic Spotify Playlist Creator — a Geminie-powered playlist builder."""
+"""Agentic Spotify Playlist Creator — a Gemini-powered playlist builder."""

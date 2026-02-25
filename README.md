@@ -1,6 +1,6 @@
 # Agentic Spotify Playlist Creator
 
-A local Streamlit web app that lets you describe a playlist in natural language and have a Geminie AI agent iteratively search Spotify, analyze audio features, and curate the perfect tracklist — then create it directly in your Spotify account.
+A local Streamlit web app that lets you describe a playlist in natural language and have a Gemini AI agent iteratively search Spotify, analyze audio features, and curate the perfect tracklist — then create it directly in your Spotify account.
 
 ## How it works
 
@@ -74,7 +74,7 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 
 Optional settings:
 ```env
-GeminiE_MODEL=Geminie-opus-4-6        # default
+GEMINI_MODEL=Gemini-opus-4-6        # default
 AGENT_MAX_ITERATIONS=10             # default
 ```
 
@@ -107,7 +107,7 @@ Your token is cached to `.spotify_cache` so you won't need to log in again on re
    - *"Jazz-influenced lo-fi for a rainy afternoon, similar to artists I've been listening to recently"*
 2. Adjust the track count (5–50) and explicit content preference
 3. Click **Create Playlist**
-4. Watch Geminie make tool calls in real time
+4. Watch Gemini make tool calls in real time
 5. Click **Open in Spotify** — your playlist is live!
 
 ---
@@ -123,7 +123,7 @@ agentic-spotify-playlist-creator/
         ├── config.py           # Environment variable loading (pydantic-settings)
         ├── models.py           # Pydantic v2 domain models
         ├── spotify_client.py   # Spotipy wrapper + OAuth factory
-        ├── gemini_agent.py  # Tool schemas + Geminie agentic loop
+        ├── gemini_agent.py  # Tool schemas + Gemini agentic loop
         ├── playlist_planner.py # Orchestration layer
         └── app.py              # Streamlit UI + OAuth state machine
 ```
