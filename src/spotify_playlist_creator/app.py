@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 
 import spotipy
 import streamlit as st
@@ -311,9 +310,6 @@ def _logout() -> None:
     logger.info("User logged out — clearing session state")
     for key in list(st.session_state.keys()):
         del st.session_state[key]
-    cache_path = settings.spotify_cache_path
-    if os.path.exists(cache_path):
-        os.remove(cache_path)
     st.rerun()
 
 

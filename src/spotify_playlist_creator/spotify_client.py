@@ -11,7 +11,7 @@ from loguru import logger
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from spotipy.cache_handler import CacheFileHandler
+from spotipy.cache_handler import MemoryCacheHandler
 
 from .config import settings, SPOTIFY_SCOPES
 from .models import (
@@ -25,9 +25,9 @@ from .models import (
 
 
 def make_auth_manager(cache_handler=None) -> SpotifyOAuth:
-    """Build a SpotifyOAuth manager. Uses disk cache by default."""
+    """Build a SpotifyOAuth manager. Token kept in memory only (no shared disk cache)."""
     if cache_handler is None:
-        cache_handler = CacheFileHandler(cache_path=settings.spotify_cache_path)
+        cache_handler = MemoryCacheHandler()
     return SpotifyOAuth(
         client_id=settings.spotify_client_id,
         client_secret=settings.spotify_client_secret,
