@@ -47,9 +47,9 @@ Gemini uses 6 tools in a loop:
 4. Under **Redirect URIs**, add: `http://localhost:8501`
 5. Save — then copy your **Client ID** and **Client Secret**
 
-### 2. Anthropic API Key
+### 2. Google Gemini API Key
 
-Get your API key from [console.anthropic.com](https://console.anthropic.com/).
+Get your API key from [Google AI Studio](https://aistudio.google.com/api-keys).
 
 ### 3. Install dependencies
 
@@ -123,7 +123,7 @@ agentic-spotify-playlist-creator/
         ├── config.py           # Environment variable loading (pydantic-settings)
         ├── models.py           # Pydantic v2 domain models
         ├── spotify_client.py   # Spotipy wrapper + OAuth factory
-        ├── gemini_agent.py  # Tool schemas + Gemini agentic loop
+        ├── gemini_agent.py     # Tool schemas + Gemini agentic loop
         ├── playlist_planner.py # Orchestration layer
         └── app.py              # Streamlit UI + OAuth state machine
 ```
