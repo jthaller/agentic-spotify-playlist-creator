@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import logging
+import re
 from collections import Counter
 
 import requests as _requests
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -195,7 +195,18 @@ class SpotifyClient:
             tid[len("spotify:track:"):] if tid.startswith("spotify:track:") else tid.strip()
             for tid in track_ids
         ]
-        uris = [f"spotify:track:{tid}" for tid in bare_ids]
+
+        # Drop hallucinated IDs before hitting the API.
+        # Spotify track IDs are exactly 22 base62 characters (0-9, a-z, A-Z).
+        _VALID_ID = re.compile(r'^[0-9A-Za-z]{22}$')
+        valid_ids, bad_ids = [], []
+        for tid in bare_ids:
+            (valid_ids if _VALID_ID.match(tid) else bad_ids).append(tid)
+        if bad_ids:
+            logger.warning("Dropping {} invalid track ID(s) — likely hallucinated by the model: {}",
+                           len(bad_ids), bad_ids)
+
+        uris = [f"spotify:track:{tid}" for tid in valid_ids]
         for i in range(0, len(uris), 100):
             resp = _requests.post(
                 f"https://api.spotify.com/v1/playlists/{pl['id']}/items",
@@ -203,12 +214,13 @@ class SpotifyClient:
                 headers=headers,
             )
             if not resp.ok:
-                logger.error("Add items failed %s: %s", resp.status_code, resp.text)
+                logger.error("Add items failed {} | uris={} | response={}",
+                             resp.status_code, uris[i : i + 100], resp.text)
                 resp.raise_for_status()
 
         # Fetch full details
         playlist_data = self._sp.playlist(pl["id"])
-        return self._parse_playlist(playlist_data, track_ids)
+        return self._parse_playlist(playlist_data, valid_ids)
 
     # ------------------------------------------------------------------ #
     # Listening context

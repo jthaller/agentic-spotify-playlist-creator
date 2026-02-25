@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-import logging
 import os
 
 import spotipy
 import streamlit as st
+from loguru import logger
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-# Reduce noise from chatty libraries
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("google").setLevel(logging.WARNING)
+from spotify_playlist_creator.logging_setup import setup_logging
+
+# Must run before any other import that logs (spotipy, google-genai, etc.)
+setup_logging()
 
 from spotify_playlist_creator.config import settings
+from spotify_playlist_creator.logging_setup import log_event
 from spotify_playlist_creator.models import AgentResult, Playlist, PlaylistRequest, UserListeningContext, UserProfile
 from spotify_playlist_creator.playlist_planner import PlaylistPlanner
 from spotify_playlist_creator.spotify_client import make_auth_manager
@@ -57,6 +53,8 @@ def _handle_oauth_callback() -> bool:
     st.session_state.token_info = token_info
     # Clear the code from the URL immediately to prevent double-processing
     st.query_params.clear()
+    log_event("OAUTH", "/oauth/callback", status=200)
+    logger.info("OAuth callback complete — token acquired")
     return True
 
 
@@ -152,6 +150,8 @@ def _render_header(user_profile: UserProfile) -> None:
 
 def _logout() -> None:
     """Clear all session state and delete the cache file."""
+    log_event("SESSION", "/session/logout", status=200)
+    logger.info("User logged out — clearing session state")
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     cache_path = settings.spotify_cache_path
