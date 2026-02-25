@@ -112,6 +112,41 @@ Your token is cached to `.spotify_cache` so you won't need to log in again on re
 
 ---
 
+## Logging
+
+Logs are written to the `logs/` directory (created automatically on first run, gitignored).
+
+| File | Format | Contains |
+|------|--------|----------|
+| `logs/app.log` | Plain text | All application events — debug, info, warnings, errors |
+| `logs/access.log` | Apache Combined Log Format | Key events only: tool calls, playlist creation, OAuth, errors |
+
+`app.log` rotates at **10 MB** and keeps 7 compressed backups. `access.log` rotates **daily at midnight**.
+
+**Tail logs while the app is running:**
+```bash
+tail -f logs/app.log
+```
+
+**View only warnings and errors:**
+```bash
+grep -E 'WARNING|ERROR' logs/app.log
+```
+
+**GoAccess — interactive dashboard in the terminal:**
+```bash
+goaccess logs/access.log --log-format=COMBINED
+```
+
+**GoAccess — export an HTML report:**
+```bash
+goaccess logs/access.log --log-format=COMBINED -o report.html && open report.html
+```
+
+The GoAccess "Requests" panel shows tool call frequency, "Status Codes" shows success vs error rate, and "Hosts" shows active users (once a Spotify user ID is available after login).
+
+---
+
 ## Project structure
 
 ```
@@ -125,6 +160,7 @@ agentic-spotify-playlist-creator/
         ├── spotify_client.py   # Spotipy wrapper + OAuth factory
         ├── gemini_agent.py     # Tool schemas + Gemini agentic loop
         ├── playlist_planner.py # Orchestration layer
+        ├── logging_setup.py    # Loguru configuration, log rotation, GoAccess sink
         └── app.py              # Streamlit UI + OAuth state machine
 ```
 

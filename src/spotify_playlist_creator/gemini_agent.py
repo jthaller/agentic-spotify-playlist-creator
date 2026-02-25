@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+from spotify_playlist_creator.logging_setup import log_event
 
 from google import genai
 from google.genai import types
@@ -196,7 +197,10 @@ class PlaylistAgent:
             except Exception as exc:
                 if attempt < max_retries - 1 and "503" in str(exc):
                     wait = 2 ** attempt  # 1s, 2s, 4s
-                    logger.warning("Gemini 503, retrying in %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                    logger.warning("Gemini 503, retrying in {}s (attempt {}/{})", wait, attempt + 1, max_retries)
+                    log_event("AGENT", "/agent/generate", status=503,
+                              agent=settings.gemini_model,
+                              message=f"503 retry attempt {attempt + 1}/{max_retries}")
                     time.sleep(wait)
                 else:
                     raise
@@ -309,8 +313,22 @@ class PlaylistAgent:
                 fc = part.function_call
                 if fc.name == "finalize_playlist":
                     args = dict(fc.args)
+                    track_ids = args.get("track_ids", [])
+                    logger.info(
+                        "Agent finalized playlist '{}' | {} tracks | {} iterations | {} tool calls",
+                        args.get("playlist_name", "My Playlist"),
+                        len(track_ids),
+                        iteration,
+                        len(tool_calls_log),
+                    )
+                    log_event(
+                        "PLAYLIST", "/playlist/finalize",
+                        status=200,
+                        agent=settings.gemini_model,
+                        message=f"Playlist '{args.get('playlist_name')}' | {len(track_ids)} tracks | {iteration} iterations",
+                    )
                     return AgentResult(
-                        track_ids=args.get("track_ids", []),
+                        track_ids=track_ids,
                         playlist_name=args.get("playlist_name", "My Playlist"),
                         playlist_description=args.get("playlist_description", ""),
                         reasoning_summary=args.get("reasoning_summary", ""),
@@ -367,6 +385,7 @@ class PlaylistAgent:
         )
 
     def _dispatch_tool(self, name: str, inputs: dict) -> str:
+        t0 = time.perf_counter()
         try:
             match name:
                 case "search_tracks":
@@ -374,7 +393,7 @@ class PlaylistAgent:
                         query=inputs["query"],
                         limit=int(inputs.get("limit", 10)),
                     )
-                    return json.dumps(
+                    result = json.dumps(
                         [
                             {
                                 "id": t.id,
@@ -395,7 +414,7 @@ class PlaylistAgent:
                     limit = int(inputs.get("limit", 20))
                     if item_type == "tracks":
                         items = self._spotify.get_top_tracks(time_range=time_range, limit=limit)
-                        return json.dumps(
+                        result = json.dumps(
                             [
                                 {
                                     "id": t.id,
@@ -408,7 +427,7 @@ class PlaylistAgent:
                         )
                     else:
                         items_a = self._spotify.get_top_artists(time_range=time_range, limit=limit)
-                        return json.dumps(
+                        result = json.dumps(
                             [
                                 {
                                     "id": a.id,
@@ -421,8 +440,26 @@ class PlaylistAgent:
                         )
 
                 case _:
-                    return json.dumps({"error": f"Unknown tool: {name}"})
+                    result = json.dumps({"error": f"Unknown tool: {name}"})
+
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            logger.debug("Tool {} ok | {}ms | {} bytes", name, elapsed_ms, len(result))
+            log_event(
+                "TOOL", f"/tools/{name}",
+                status=200,
+                bytes_sent=len(result),
+                agent=settings.gemini_model,
+                message=f"Tool {name} completed in {elapsed_ms}ms",
+            )
+            return result
 
         except Exception as exc:
-            logger.error("Tool %s failed — input: %s — error: %s", name, inputs, exc, exc_info=True)
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            logger.error("Tool {} failed | {}ms | input={} | error={}", name, elapsed_ms, inputs, exc, exception=True)
+            log_event(
+                "TOOL", f"/tools/{name}",
+                status=500,
+                agent=settings.gemini_model,
+                message=f"Tool {name} failed: {exc}",
+            )
             return json.dumps({"error": str(exc)})
