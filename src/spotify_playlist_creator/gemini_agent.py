@@ -120,6 +120,54 @@ GEMINI_TOOLS = [types.Tool(function_declarations=_FUNCTION_DECLARATIONS)]
 
 
 # ------------------------------------------------------------------ #
+# Progress summary builder
+# ------------------------------------------------------------------ #
+
+_TIME_RANGE_LABEL = {
+    "short_term": "recent",
+    "medium_term": "6-month",
+    "long_term": "all-time",
+}
+
+
+def _summarize_iteration(iteration: int, calls: list[tuple[str, dict]]) -> str:
+    """Turn a completed iteration's tool calls into a single readable sentence.
+
+    Uses only the tool names and their inputs — no extra API call needed.
+    """
+    search_queries: list[str] = []
+    other_parts: list[str] = []
+
+    for name, inputs in calls:
+        if name == "search_tracks":
+            q = inputs.get("query", "").strip()
+            if q:
+                search_queries.append(f'"{q}"')
+        elif name == "get_user_top_items":
+            item_type = inputs.get("item_type", "items")
+            range_key = inputs.get("time_range", "")
+            label = _TIME_RANGE_LABEL.get(range_key, range_key)
+            other_parts.append(f"fetched your {label} top {item_type}")
+        elif name == "get_recommendations":
+            other_parts.append("fetched recommendations")
+        elif name == "get_audio_features":
+            other_parts.append("analyzed audio features")
+        elif name == "get_artist_top_tracks":
+            other_parts.append("fetched artist top tracks")
+        else:
+            other_parts.append(name)
+
+    parts: list[str] = []
+    if search_queries:
+        joined = ", ".join(search_queries)
+        parts.append(f"Searched for {joined}")
+    parts.extend(p[0].upper() + p[1:] for p in other_parts)
+
+    body = "; ".join(parts) if parts else "No tools called"
+    return f"Iteration {iteration}: {body}"
+
+
+# ------------------------------------------------------------------ #
 # Prompt builders
 # ------------------------------------------------------------------ #
 
@@ -225,9 +273,6 @@ class PlaylistAgent:
 
         while iteration < max_iterations:
             iteration += 1
-
-            if progress_callback:
-                progress_callback(f"Thinking... (iteration {iteration}/{max_iterations})")
 
             # On the last 2 iterations, force finalize_playlist
             forcing_finalize = iteration >= max_iterations - 1 and len(tool_calls_log) > 0
@@ -340,10 +385,6 @@ class PlaylistAgent:
             calls = [(part.function_call.name, dict(part.function_call.args))
                      for part in function_call_parts]
 
-            if progress_callback:
-                names = ", ".join(name for name, _ in calls)
-                progress_callback(f"Calling tools: {names}")
-
             results: dict[int, str] = {}
             with ThreadPoolExecutor(max_workers=len(calls)) as pool:
                 futures = {
@@ -379,6 +420,9 @@ class PlaylistAgent:
                 )
 
             contents.append(types.Content(role="user", parts=response_parts))
+
+            if progress_callback:
+                progress_callback(_summarize_iteration(iteration, calls))
 
         raise RuntimeError(
             f"Agent did not finalize the playlist within {max_iterations} iterations."

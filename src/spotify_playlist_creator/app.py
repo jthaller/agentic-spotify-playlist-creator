@@ -31,6 +31,21 @@ st.set_page_config(
     layout="centered",
 )
 
+# SF Pro on macOS/iOS; graceful fallback chain on other platforms.
+st.markdown(
+    """
+    <style>
+    html, body, [class*="css"] {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                     "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial,
+                     sans-serif;
+        -webkit-font-smoothing: antialiased;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ------------------------------------------------------------------ #
 # Design constants
 # ------------------------------------------------------------------ #
