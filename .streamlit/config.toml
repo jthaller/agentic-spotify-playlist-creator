@@ -1,0 +1,7 @@
+[theme]
+base                     = "dark"
+primaryColor             = "#1DB954"   # Spotify green
+backgroundColor          = "#121212"   # Spotify canvas
+secondaryBackgroundColor = "#1A1A1A"   # Widget / container background
+textColor                = "#FFFFFF"
+font                     = "sans serif"
