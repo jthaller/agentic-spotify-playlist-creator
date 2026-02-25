@@ -190,7 +190,12 @@ class SpotifyClient:
         # forbidden for newer Spotify apps; spotipy hasn't been updated yet).
         token = self._sp._auth
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        uris = [f"spotify:track:{tid}" for tid in track_ids]
+        # Normalize IDs — the model sometimes passes full URIs instead of bare IDs
+        bare_ids = [
+            tid[len("spotify:track:"):] if tid.startswith("spotify:track:") else tid.strip()
+            for tid in track_ids
+        ]
+        uris = [f"spotify:track:{tid}" for tid in bare_ids]
         for i in range(0, len(uris), 100):
             resp = _requests.post(
                 f"https://api.spotify.com/v1/playlists/{pl['id']}/items",
@@ -278,11 +283,23 @@ class SpotifyClient:
         images = data.get("images") or []
         image_url = images[0].get("url") if images else None
         owner = data.get("owner") or {}
+        # Spotify API changed: field was renamed from "tracks" to "items".
+        # Both are paging objects; we need the inner "items" list from whichever is present.
+        track_items = (
+            (data.get("items") or {}).get("items")
+            or (data.get("tracks") or {}).get("items")
+            or []
+        )
+        tracks = []
+        for item in track_items:
+            track_data = item.get("item") or item.get("track")
+            if isinstance(track_data, dict) and track_data.get("id"):
+                tracks.append(self._parse_track(track_data))
         return Playlist(
             id=data["id"],
             name=data.get("name", ""),
             description=data.get("description", ""),
-            tracks=[],  # Skip parsing all tracks from the API response
+            tracks=tracks,
             spotify_url=ext_urls.get("spotify"),
             image_url=image_url,
             owner=owner.get("display_name") or owner.get("id", ""),

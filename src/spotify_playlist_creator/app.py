@@ -84,7 +84,7 @@ def _try_get_cached_token() -> dict | None:
 def _render_auth_page() -> None:
     st.title("🎵 Spotify Playlist Creator")
     st.markdown(
-        "Describe any playlist in natural language and let Claude build it for you — "
+        "Describe any playlist in natural language and let Gemini build it for you — "
         "powered by the Spotify API."
     )
     st.divider()
@@ -160,6 +160,7 @@ def _logout() -> None:
     st.rerun()
 
 
+
 def _render_playlist(playlist: Playlist, agent_result: AgentResult) -> None:
     st.success(f"Playlist **{playlist.name}** created!")
 
@@ -174,8 +175,8 @@ def _render_playlist(playlist: Playlist, agent_result: AgentResult) -> None:
 
     st.markdown(f"*{playlist.description}*" if playlist.description else "")
 
-    # How Claude built this
-    with st.expander("How Claude built this playlist", expanded=False):
+    # How Gemini built this
+    with st.expander("How Gemini built this playlist", expanded=False):
         st.markdown("### Reasoning")
         st.markdown(agent_result.reasoning_summary)
 
@@ -197,33 +198,88 @@ def _render_playlist(playlist: Playlist, agent_result: AgentResult) -> None:
                     except Exception:
                         st.code(tc.tool_output)
 
-    # Track list
-    tracks = st.session_state.get("playlist_tracks", [])
+    tracks = playlist.tracks
+    st.markdown("### Tracks")
     if tracks:
-        st.markdown("### Tracks")
+        st.markdown("""
+        <style>
+        .track-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 4px;
+            border-bottom: 1px solid rgba(128,128,128,0.15);
+        }
+        .track-row:last-child { border-bottom: none; }
+        .track-num {
+            min-width: 24px;
+            text-align: right;
+            font-size: 13px;
+            color: #888;
+            flex-shrink: 0;
+        }
+        .track-art {
+            width: 52px;
+            height: 52px;
+            border-radius: 4px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .track-art-placeholder {
+            width: 52px;
+            height: 52px;
+            border-radius: 4px;
+            background: #333;
+            flex-shrink: 0;
+        }
+        .track-info { flex: 1; min-width: 0; }
+        .track-name {
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .track-name a { color: inherit; text-decoration: none; }
+        .track-name a:hover { text-decoration: underline; }
+        .track-sub {
+            font-size: 12px;
+            color: #888;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 3px;
+        }
+        .track-duration {
+            font-size: 13px;
+            color: #888;
+            flex-shrink: 0;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         for i, track in enumerate(tracks, 1):
-            col_num, col_img, col_info, col_meta = st.columns([0.5, 1, 6, 2])
-            with col_num:
-                st.markdown(f"**{i}**")
-            with col_img:
-                if track.album_image_url:
-                    st.image(track.album_image_url, width=56)
-            with col_info:
-                name_display = (
-                    f"[{track.name}]({track.spotify_url})"
-                    if track.spotify_url
-                    else track.name
-                )
-                st.markdown(name_display)
-                st.caption(f"{track.artist_names} · {track.album_name}")
-            with col_meta:
-                st.caption(f"⭐ {track.popularity}")
-                st.caption(track.duration_str)
-    else:
-        # Fallback: show track IDs
-        st.markdown("### Track IDs")
-        for i, tid in enumerate(agent_result.track_ids, 1):
-            st.markdown(f"{i}. `{tid}`")
+            art = (
+                f'<img class="track-art" src="{track.album_image_url}" />'
+                if track.album_image_url
+                else '<div class="track-art-placeholder"></div>'
+            )
+            name = (
+                f'<a href="{track.spotify_url}" target="_blank">{track.name}</a>'
+                if track.spotify_url
+                else track.name
+            )
+            st.markdown(f"""
+            <div class="track-row">
+                <span class="track-num">{i}</span>
+                {art}
+                <div class="track-info">
+                    <div class="track-name">{name}</div>
+                    <div class="track-sub">{track.artist_names}&nbsp;·&nbsp;{track.album_name}</div>
+                </div>
+                <span class="track-duration">{track.duration_str}</span>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 def _render_main(
@@ -282,7 +338,7 @@ def _render_main(
             status_placeholder.info(msg)
 
         try:
-            with st.spinner("Claude is building your playlist..."):
+            with st.spinner("Gemini is building your playlist..."):
                 agent_result, playlist = planner.create_playlist(
                     request=request,
                     user_profile=user_profile,
@@ -291,18 +347,6 @@ def _render_main(
                 )
 
             status_placeholder.empty()
-
-            # Fetch track details for display
-            if agent_result.track_ids:
-                try:
-                    from spotify_playlist_creator.spotify_client import SpotifyClient
-                    client = SpotifyClient(sp)
-                    # search_tracks won't work; fetch tracks directly
-                    raw = sp.tracks(agent_result.track_ids[:50])
-                    tracks = [client._parse_track(t) for t in (raw.get("tracks") or [])]
-                    st.session_state["playlist_tracks"] = tracks
-                except Exception:
-                    st.session_state["playlist_tracks"] = []
 
             st.session_state["created_playlist"] = playlist
             st.session_state["agent_result"] = agent_result

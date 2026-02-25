@@ -1,6 +1,6 @@
 # Agentic Spotify Playlist Creator
 
-A local Streamlit web app that lets you describe a playlist in natural language and have a Claude AI agent iteratively search Spotify, analyze audio features, and curate the perfect tracklist — then create it directly in your Spotify account.
+A local Streamlit web app that lets you describe a playlist in natural language and have a Gemini AI agent iteratively search Spotify, analyze audio features, and curate the perfect tracklist — then create it directly in your Spotify account.
 
 ## How it works
 
@@ -11,7 +11,7 @@ You (Streamlit UI)
 PlaylistPlanner (orchestration)
   │  User profile + listening history + request
   ▼
-PlaylistAgent (Claude agentic loop)
+PlaylistAgent (Gemini agentic loop)
   │  Calls Spotify tools iteratively
   ▼
 SpotifyClient (Spotify Web API)
@@ -20,13 +20,13 @@ SpotifyClient (Spotify Web API)
 Playlist created → URL returned → Displayed in UI
 ```
 
-Claude uses 6 tools in a loop:
+Gemini uses 6 tools in a loop:
 - **search_tracks** — full-text catalog search
 - **get_recommendations** — seed-based audio discovery (most powerful)
 - **get_audio_features** — energy, valence, danceability, tempo per track
 - **get_user_top_items** — your listening history for personalization
 - **get_artist_top_tracks** — deep-cut discovery by artist
-- **finalize_playlist** — signals Claude is done; playlist is created
+- **finalize_playlist** — signals Gemini is done; playlist is created
 
 ---
 
@@ -74,7 +74,7 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 
 Optional settings:
 ```env
-CLAUDE_MODEL=claude-opus-4-6        # default
+GEMINI_MODEL=Gemini-opus-4-6        # default
 AGENT_MAX_ITERATIONS=10             # default
 ```
 
@@ -107,7 +107,7 @@ Your token is cached to `.spotify_cache` so you won't need to log in again on re
    - *"Jazz-influenced lo-fi for a rainy afternoon, similar to artists I've been listening to recently"*
 2. Adjust the track count (5–50) and explicit content preference
 3. Click **Create Playlist**
-4. Watch Claude make tool calls in real time
+4. Watch Gemini make tool calls in real time
 5. Click **Open in Spotify** — your playlist is live!
 
 ---
@@ -123,7 +123,7 @@ agentic-spotify-playlist-creator/
         ├── config.py           # Environment variable loading (pydantic-settings)
         ├── models.py           # Pydantic v2 domain models
         ├── spotify_client.py   # Spotipy wrapper + OAuth factory
-        ├── anthropic_agent.py  # Tool schemas + Claude agentic loop
+        ├── gemini_agent.py  # Tool schemas + Gemini agentic loop
         ├── playlist_planner.py # Orchestration layer
         └── app.py              # Streamlit UI + OAuth state machine
 ```
