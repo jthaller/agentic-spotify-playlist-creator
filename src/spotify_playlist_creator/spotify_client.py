@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
+
+import requests as _requests
+
+logger = logging.getLogger(__name__)
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -85,7 +90,7 @@ class SpotifyClient:
     # ------------------------------------------------------------------ #
 
     def search_tracks(self, query: str, limit: int = 10) -> list[Track]:
-        data = self._sp.search(q=query, type="track", limit=limit)
+        data = self._sp.search(q=query, type="track", limit=limit, market="from_token")
         items = data.get("tracks", {}).get("items") or []
         return [self._parse_track(item) for item in items]
 
@@ -149,10 +154,12 @@ class SpotifyClient:
     def get_artist_top_tracks(
         self,
         artist_id: str,
-        country: str = "US",
         limit: int = 10,
     ) -> list[Track]:
-        data = self._sp.artist_top_tracks(artist_id, country=country)
+        # Bypass spotipy's artist_top_tracks wrapper which still sends deprecated
+        # `country` param — Spotify API now requires `market` (changed Nov 2024)
+        trid = self._sp._get_id("artist", artist_id)
+        data = self._sp._get(f"artists/{trid}/top-tracks", market="from_token")
         tracks = data.get("tracks") or []
         return [self._parse_track(t) for t in tracks[:limit]]
 
@@ -172,16 +179,27 @@ class SpotifyClient:
         track_ids: list[str],
         public: bool = False,
     ) -> Playlist:
-        pl = self._sp.user_playlist_create(
-            user=user_id,
-            name=name,
-            public=public,
-            description=description,
+        # Use POST /v1/me/playlists (modern endpoint) instead of the legacy
+        # /v1/users/{user_id}/playlists to avoid user_id mismatch 403s.
+        pl = self._sp._post(
+            "me/playlists",
+            payload={"name": name, "public": public, "description": description},
         )
-        # Add tracks in chunks of 100
+
+        # Add tracks via /items (not /tracks — the /tracks endpoint is
+        # forbidden for newer Spotify apps; spotipy hasn't been updated yet).
+        token = self._sp._auth
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         uris = [f"spotify:track:{tid}" for tid in track_ids]
         for i in range(0, len(uris), 100):
-            self._sp.playlist_add_items(pl["id"], uris[i : i + 100])
+            resp = _requests.post(
+                f"https://api.spotify.com/v1/playlists/{pl['id']}/items",
+                json={"uris": uris[i : i + 100]},
+                headers=headers,
+            )
+            if not resp.ok:
+                logger.error("Add items failed %s: %s", resp.status_code, resp.text)
+                resp.raise_for_status()
 
         # Fetch full details
         playlist_data = self._sp.playlist(pl["id"])

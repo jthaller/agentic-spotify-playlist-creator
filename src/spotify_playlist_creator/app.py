@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import spotipy
 import streamlit as st
 
-from .config import settings
-from .models import AgentResult, Playlist, PlaylistRequest, UserListeningContext, UserProfile
-from .playlist_planner import PlaylistPlanner
-from .spotify_client import make_auth_manager
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+# Reduce noise from chatty libraries
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("google").setLevel(logging.WARNING)
+
+from spotify_playlist_creator.config import settings
+from spotify_playlist_creator.models import AgentResult, Playlist, PlaylistRequest, UserListeningContext, UserProfile
+from spotify_playlist_creator.playlist_planner import PlaylistPlanner
+from spotify_playlist_creator.spotify_client import make_auth_manager
 
 
 # ------------------------------------------------------------------ #
@@ -85,9 +96,16 @@ def _render_auth_page() -> None:
 
 
 def _initialize_spotify(token_info: dict) -> spotipy.Spotify:
-    """Create a spotipy.Spotify instance using the auth manager (enables auto-refresh)."""
-    auth_manager = _get_auth_manager()
-    return spotipy.Spotify(auth_manager=auth_manager)
+    """Return a cached spotipy instance, creating it once per session."""
+    if "sp" not in st.session_state:
+        access_token = (token_info or {}).get("access_token")
+        if not access_token:
+            st.error("Spotify authentication failed — no access token. Please log in again.")
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.stop()
+        st.session_state.sp = spotipy.Spotify(auth=access_token)
+    return st.session_state.sp
 
 
 # ------------------------------------------------------------------ #
@@ -277,7 +295,7 @@ def _render_main(
             # Fetch track details for display
             if agent_result.track_ids:
                 try:
-                    from .spotify_client import SpotifyClient
+                    from spotify_playlist_creator.spotify_client import SpotifyClient
                     client = SpotifyClient(sp)
                     # search_tracks won't work; fetch tracks directly
                     raw = sp.tracks(agent_result.track_ids[:50])

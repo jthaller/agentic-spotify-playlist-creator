@@ -1,30 +1,37 @@
-"""Claude agentic loop with Spotify tool definitions."""
+"""Gemini agentic loop with Spotify tool definitions."""
 
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Callable
 
-import anthropic
+logger = logging.getLogger(__name__)
 
-from .config import settings
-from .models import AgentResult, PlaylistRequest, ToolCall, UserListeningContext, UserProfile
-from .spotify_client import SpotifyClient
+from google import genai
+from google.genai import types
+
+from spotify_playlist_creator.config import settings
+from spotify_playlist_creator.models import AgentResult, PlaylistRequest, ToolCall, UserListeningContext, UserProfile
+from spotify_playlist_creator.spotify_client import SpotifyClient
 
 
 # ------------------------------------------------------------------ #
-# Tool definitions
+# Tool definitions (JSON Schema format)
 # ------------------------------------------------------------------ #
 
-TOOLS: list[dict] = [
-    {
-        "name": "search_tracks",
-        "description": (
-            "Search the Spotify catalog for tracks matching a query. "
-            "Use specific queries like 'artist:Radiohead genre:alternative' for better results. "
+_FUNCTION_DECLARATIONS = [
+    types.FunctionDeclaration(
+        name="search_tracks",
+        description=(
+            "Search the Spotify catalog for tracks. This is your PRIMARY discovery tool. "
+            "Use varied, creative queries to find tracks matching the mood, genre, or activity. "
+            "Try queries like 'genre:k-pop upbeat dance 2024', 'artist:IU', 'mellow lo-fi study', "
+            "'energetic workout hip-hop'. Make multiple calls with different queries to diversify results. "
             "Returns track IDs, names, artists, and popularity scores."
         ),
-        "input_schema": {
+        parameters={
             "type": "object",
             "properties": {
                 "query": {
@@ -33,96 +40,19 @@ TOOLS: list[dict] = [
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Number of results to return (1–50)",
-                    "default": 10,
+                    "description": "Number of results to return (1-50)",
                 },
             },
             "required": ["query"],
         },
-    },
-    {
-        "name": "get_recommendations",
-        "description": (
-            "Get track recommendations from Spotify based on seed tracks, artists, or genres. "
-            "This is the most powerful discovery tool — use it frequently. "
-            "Total number of seeds (tracks + artists + genres) must be between 1 and 5."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "seed_tracks": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of Spotify track IDs to use as seeds (max 5 total seeds)",
-                },
-                "seed_artists": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of Spotify artist IDs to use as seeds (max 5 total seeds)",
-                },
-                "seed_genres": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": (
-                        "List of genre strings to use as seeds. "
-                        "Must be valid Spotify genres (e.g. 'pop', 'rock', 'electronic', 'jazz'). "
-                        "Max 5 total seeds."
-                    ),
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Number of recommendations to return (1–100)",
-                    "default": 20,
-                },
-                "target_energy": {
-                    "type": "number",
-                    "description": "Target energy level 0.0–1.0 (0=calm, 1=intense)",
-                },
-                "target_valence": {
-                    "type": "number",
-                    "description": "Target valence/mood 0.0–1.0 (0=sad/dark, 1=happy/upbeat)",
-                },
-                "target_danceability": {
-                    "type": "number",
-                    "description": "Target danceability 0.0–1.0",
-                },
-                "target_tempo": {
-                    "type": "number",
-                    "description": "Target tempo in BPM",
-                },
-                "min_popularity": {
-                    "type": "integer",
-                    "description": "Minimum track popularity 0–100",
-                },
-            },
-            "required": [],
-        },
-    },
-    {
-        "name": "get_audio_features",
-        "description": (
-            "Get detailed audio features (energy, valence, danceability, tempo, etc.) "
-            "for a list of tracks. Use this to evaluate candidate tracks before selecting them."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "track_ids": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of Spotify track IDs (max 100)",
-                },
-            },
-            "required": ["track_ids"],
-        },
-    },
-    {
-        "name": "get_user_top_items",
-        "description": (
+    ),
+    types.FunctionDeclaration(
+        name="get_user_top_items",
+        description=(
             "Get the user's top tracks or artists for a given time range. "
             "Use this to personalize recommendations based on listening history."
         ),
-        "input_schema": {
+        parameters={
             "type": "object",
             "properties": {
                 "item_type": {
@@ -140,41 +70,21 @@ TOOLS: list[dict] = [
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Number of items to return (1–50)",
-                    "default": 20,
+                    "description": "Number of items to return (1-50)",
                 },
             },
             "required": ["item_type", "time_range"],
         },
-    },
-    {
-        "name": "get_artist_top_tracks",
-        "description": "Get the top tracks for a specific artist by their Spotify artist ID.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "artist_id": {
-                    "type": "string",
-                    "description": "Spotify artist ID",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Number of top tracks to return (1–10)",
-                    "default": 10,
-                },
-            },
-            "required": ["artist_id"],
-        },
-    },
-    {
-        "name": "finalize_playlist",
-        "description": (
+    ),
+    types.FunctionDeclaration(
+        name="finalize_playlist",
+        description=(
             "Call this when you have selected the final tracks for the playlist. "
             "This ends the agent loop and creates the playlist. "
             "Only include track IDs you have actually received from tool responses — "
             "never fabricate or guess track IDs."
         ),
-        "input_schema": {
+        parameters={
             "type": "object",
             "properties": {
                 "track_ids": {
@@ -201,8 +111,10 @@ TOOLS: list[dict] = [
             },
             "required": ["track_ids", "playlist_name", "playlist_description", "reasoning_summary"],
         },
-    },
+    ),
 ]
+
+GEMINI_TOOLS = [types.Tool(function_declarations=_FUNCTION_DECLARATIONS)]
 
 
 # ------------------------------------------------------------------ #
@@ -237,22 +149,24 @@ def build_system_prompt(
 - **Favorite genres:** {genres}
 
 ## Your Approach
-1. **Analyze the request** for mood, energy level, genre, tempo, activity, and any explicit artist/track preferences.
-2. **Build a 2× candidate pool** before curating — gather at least twice as many tracks as needed, then select the best.
-3. **Use `get_recommendations` as your primary discovery tool** — it's the most powerful. Tune `target_energy`, `target_valence`, `target_danceability`, and `target_tempo` based on the request.
-4. **Personalize** — reference the user's listening history when appropriate, but also introduce new discoveries.
-5. **Never fabricate track IDs** — only use IDs that appeared in tool responses.
-6. **Order tracks thoughtfully** — consider energy arc (warm-up → peak → cool-down), genre flow, and tempo transitions.
-7. **Call `finalize_playlist`** when you have curated the final selection.
+1. **Analyze the request** for mood, genre, activity, and any explicit artist preferences.
+2. **Use search_tracks as your primary discovery tool.** Make 3-5 varied searches with different queries to build a diverse candidate pool. Good query patterns:
+   - Genre + mood: `"genre:k-pop upbeat dance"`
+   - Artist name: `"artist:IU"` or `"artist:Radiohead"`
+   - Activity/mood keywords: `"chill lo-fi study beats 2024"`
+   - Specific subgenre: `"indie pop dreamy female vocalist"`
+3. **Use get_user_top_items** to see the user's top artists/tracks for personalization — then search for those artists by name using search_tracks.
+4. **Never fabricate track IDs** — only use IDs copied exactly from tool responses. Made-up IDs will cause API errors.
+5. **Order tracks thoughtfully** — consider energy arc, genre flow, and tempo transitions.
+6. **Call finalize_playlist as soon as you have enough tracks** — do not keep searching once you have sufficient candidates.
 
 ## Constraints
-- Total recommendation seeds (tracks + artists + genres combined) must be 1–5.
 - Respect explicit content preferences stated in the user's request.
 - Aim for variety — avoid repeating artists too many times unless specifically requested.
 """
 
 
-def build_user_message(request: "PlaylistRequest") -> str:
+def build_user_message(request: PlaylistRequest) -> str:
     explicit_note = "" if request.include_explicit else " (no explicit content)"
     return (
         f"Please create a playlist with {request.target_length} tracks{explicit_note}.\n\n"
@@ -267,7 +181,24 @@ def build_user_message(request: "PlaylistRequest") -> str:
 class PlaylistAgent:
     def __init__(self, spotify_client: SpotifyClient) -> None:
         self._spotify = spotify_client
-        self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        self._client = genai.Client(api_key=settings.gemini_api_key)
+
+    def _generate(self, contents, config, max_retries: int = 3):
+        """Call generate_content with exponential backoff on 503 UNAVAILABLE."""
+        for attempt in range(max_retries):
+            try:
+                return self._client.models.generate_content(
+                    model=settings.gemini_model,
+                    contents=contents,
+                    config=config,
+                )
+            except Exception as exc:
+                if attempt < max_retries - 1 and "503" in str(exc):
+                    wait = 2 ** attempt  # 1s, 2s, 4s
+                    logger.warning("Gemini 503, retrying in %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                    time.sleep(wait)
+                else:
+                    raise
 
     def run(
         self,
@@ -277,8 +208,11 @@ class PlaylistAgent:
         progress_callback: Callable[[str], None] | None = None,
     ) -> AgentResult:
         system = build_system_prompt(user_profile, listening_context)
-        messages: list[dict] = [
-            {"role": "user", "content": build_user_message(request)}
+        contents: list[types.Content] = [
+            types.Content(
+                role="user",
+                parts=[types.Part(text=build_user_message(request))],
+            )
         ]
         tool_calls_log: list[ToolCall] = []
         iteration = 0
@@ -290,66 +224,136 @@ class PlaylistAgent:
             if progress_callback:
                 progress_callback(f"Thinking... (iteration {iteration}/{max_iterations})")
 
-            response = self._client.messages.create(
-                model=settings.claude_model,
-                max_tokens=4096,
-                system=system,
-                tools=TOOLS,  # type: ignore[arg-type]
-                messages=messages,
+            # On the last 2 iterations, force finalize_playlist
+            forcing_finalize = iteration >= max_iterations - 1 and len(tool_calls_log) > 0
+            if forcing_finalize:
+                contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=(
+                            "You must now call finalize_playlist with the tracks you have gathered. "
+                            "No more search or recommendation calls are allowed."
+                        ))],
+                    )
+                )
+                tool_config = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        mode="ANY",
+                        allowed_function_names=["finalize_playlist"],
+                    )
+                )
+            else:
+                tool_config = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(mode="AUTO")
+                )
+
+            response = self._generate(
+                contents,
+                types.GenerateContentConfig(
+                    system_instruction=system,
+                    tools=GEMINI_TOOLS,
+                    tool_config=tool_config,
+                ),
             )
 
-            # Append assistant message
-            messages.append({"role": "assistant", "content": response.content})
+            candidate = response.candidates[0]
+            contents.append(candidate.content)
 
-            if response.stop_reason == "end_turn":
+            # Collect all function calls from this response
+            function_call_parts = [
+                p for p in candidate.content.parts if p.function_call is not None
+            ]
+
+            # No tool calls — force a finalize on next iteration if we have tracks
+            if not function_call_parts:
+                if len(tool_calls_log) > 0:
+                    # Give the model one forced finalize attempt
+                    contents.append(
+                        types.Content(
+                            role="user",
+                            parts=[types.Part(text=(
+                                "You stopped without finalizing. "
+                                "Call finalize_playlist now with the tracks you have gathered."
+                            ))],
+                        )
+                    )
+                    response = self._generate(
+                        contents,
+                        types.GenerateContentConfig(
+                            system_instruction=system,
+                            tools=GEMINI_TOOLS,
+                            tool_config=types.ToolConfig(
+                                function_calling_config=types.FunctionCallingConfig(
+                                    mode="ANY",
+                                    allowed_function_names=["finalize_playlist"],
+                                )
+                            ),
+                        ),
+                    )
+                    for part in response.candidates[0].content.parts:
+                        if part.function_call and part.function_call.name == "finalize_playlist":
+                            args = dict(part.function_call.args)
+                            return AgentResult(
+                                track_ids=args.get("track_ids", []),
+                                playlist_name=args.get("playlist_name", "My Playlist"),
+                                playlist_description=args.get("playlist_description", ""),
+                                reasoning_summary=args.get("reasoning_summary", ""),
+                                tool_calls=tool_calls_log,
+                                iterations_used=iteration,
+                            )
                 break
 
-            if response.stop_reason == "tool_use":
-                tool_results = []
-
-                for block in response.content:
-                    if block.type != "tool_use":
-                        continue
-
-                    tool_name = block.name
-                    tool_input = block.input
-
-                    if progress_callback:
-                        progress_callback(f"Calling tool: {tool_name}")
-
-                    # Finalize terminates the loop immediately
-                    if tool_name == "finalize_playlist":
-                        return AgentResult(
-                            track_ids=tool_input.get("track_ids", []),
-                            playlist_name=tool_input.get("playlist_name", "My Playlist"),
-                            playlist_description=tool_input.get("playlist_description", ""),
-                            reasoning_summary=tool_input.get("reasoning_summary", ""),
-                            tool_calls=tool_calls_log,
-                            iterations_used=iteration,
-                        )
-
-                    # Dispatch and collect result
-                    result_str = self._dispatch_tool(tool_name, tool_input)
-
-                    tool_calls_log.append(
-                        ToolCall(
-                            tool_name=tool_name,
-                            tool_input=tool_input,
-                            tool_output=result_str,
-                            iteration=iteration,
-                        )
+            # Check for finalize_playlist first
+            for part in function_call_parts:
+                fc = part.function_call
+                if fc.name == "finalize_playlist":
+                    args = dict(fc.args)
+                    return AgentResult(
+                        track_ids=args.get("track_ids", []),
+                        playlist_name=args.get("playlist_name", "My Playlist"),
+                        playlist_description=args.get("playlist_description", ""),
+                        reasoning_summary=args.get("reasoning_summary", ""),
+                        tool_calls=tool_calls_log,
+                        iterations_used=iteration,
                     )
 
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result_str,
-                        }
-                    )
+            # Dispatch all other tool calls and collect responses
+            response_parts: list[types.Part] = []
+            for part in function_call_parts:
+                fc = part.function_call
+                tool_name = fc.name
+                tool_input = dict(fc.args)
 
-                # Feed all results back as a single user message
-                messages.append({"role": "user", "content": tool_results})
+                if progress_callback:
+                    progress_callback(f"Calling tool: {tool_name}")
+
+                result_str = self._dispatch_tool(tool_name, tool_input)
+
+                tool_calls_log.append(
+                    ToolCall(
+                        tool_name=tool_name,
+                        tool_input=tool_input,
+                        tool_output=result_str,
+                        iteration=iteration,
+                    )
+                )
+
+                # Parse result back to dict for Gemini's FunctionResponse
+                try:
+                    result_data = json.loads(result_str)
+                except Exception:
+                    result_data = {"result": result_str}
+
+                response_parts.append(
+                    types.Part(
+                        function_response=types.FunctionResponse(
+                            name=tool_name,
+                            response={"result": result_data},
+                        )
+                    )
+                )
+
+            contents.append(types.Content(role="user", parts=response_parts))
 
         raise RuntimeError(
             f"Agent did not finalize the playlist within {max_iterations} iterations."
@@ -361,7 +365,7 @@ class PlaylistAgent:
                 case "search_tracks":
                     tracks = self._spotify.search_tracks(
                         query=inputs["query"],
-                        limit=inputs.get("limit", 10),
+                        limit=int(inputs.get("limit", 10)),
                     )
                     return json.dumps(
                         [
@@ -375,58 +379,13 @@ class PlaylistAgent:
                                 "duration": t.duration_str,
                             }
                             for t in tracks
-                        ]
-                    )
-
-                case "get_recommendations":
-                    tracks = self._spotify.get_recommendations(
-                        seed_tracks=inputs.get("seed_tracks"),
-                        seed_artists=inputs.get("seed_artists"),
-                        seed_genres=inputs.get("seed_genres"),
-                        limit=inputs.get("limit", 20),
-                        target_energy=inputs.get("target_energy"),
-                        target_valence=inputs.get("target_valence"),
-                        target_danceability=inputs.get("target_danceability"),
-                        target_tempo=inputs.get("target_tempo"),
-                        min_popularity=inputs.get("min_popularity"),
-                    )
-                    return json.dumps(
-                        [
-                            {
-                                "id": t.id,
-                                "name": t.name,
-                                "artists": t.artist_names,
-                                "album": t.album_name,
-                                "popularity": t.popularity,
-                                "explicit": t.explicit,
-                                "duration": t.duration_str,
-                            }
-                            for t in tracks
-                        ]
-                    )
-
-                case "get_audio_features":
-                    features = self._spotify.get_audio_features(inputs["track_ids"])
-                    return json.dumps(
-                        [
-                            {
-                                "id": f.id,
-                                "energy": f.energy,
-                                "valence": f.valence,
-                                "danceability": f.danceability,
-                                "tempo": f.tempo,
-                                "acousticness": f.acousticness,
-                                "instrumentalness": f.instrumentalness,
-                                "speechiness": f.speechiness,
-                            }
-                            for f in features
                         ]
                     )
 
                 case "get_user_top_items":
                     item_type = inputs["item_type"]
                     time_range = inputs["time_range"]
-                    limit = inputs.get("limit", 20)
+                    limit = int(inputs.get("limit", 20))
                     if item_type == "tracks":
                         items = self._spotify.get_top_tracks(time_range=time_range, limit=limit)
                         return json.dumps(
@@ -441,9 +400,7 @@ class PlaylistAgent:
                             ]
                         )
                     else:
-                        items_a = self._spotify.get_top_artists(
-                            time_range=time_range, limit=limit
-                        )
+                        items_a = self._spotify.get_top_artists(time_range=time_range, limit=limit)
                         return json.dumps(
                             [
                                 {
@@ -456,27 +413,9 @@ class PlaylistAgent:
                             ]
                         )
 
-                case "get_artist_top_tracks":
-                    tracks = self._spotify.get_artist_top_tracks(
-                        artist_id=inputs["artist_id"],
-                        limit=inputs.get("limit", 10),
-                    )
-                    return json.dumps(
-                        [
-                            {
-                                "id": t.id,
-                                "name": t.name,
-                                "artists": t.artist_names,
-                                "popularity": t.popularity,
-                                "explicit": t.explicit,
-                                "duration": t.duration_str,
-                            }
-                            for t in tracks
-                        ]
-                    )
-
                 case _:
                     return json.dumps({"error": f"Unknown tool: {name}"})
 
         except Exception as exc:
+            logger.error("Tool %s failed — input: %s — error: %s", name, inputs, exc, exc_info=True)
             return json.dumps({"error": str(exc)})

@@ -47,7 +47,7 @@ class PlaylistPlanner:
             progress_callback(f"Creating playlist with {len(unique_ids)} tracks...")
 
         playlist = self._spotify_client.create_playlist(
-            user_id=user_profile.id,
+            user_id=user_profile.id,  # kept for signature compat, not used by endpoint
             name=agent_result.playlist_name,
             description=agent_result.playlist_description,
             track_ids=unique_ids,

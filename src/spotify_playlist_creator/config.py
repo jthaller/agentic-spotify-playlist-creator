@@ -17,11 +17,11 @@ class Settings(BaseSettings):
 
     spotify_client_id: str
     spotify_client_secret: str
-    spotify_redirect_uri: str = "http://localhost:8501"
+    spotify_redirect_uri: str = "http://127.0.0.1:8501"
     spotify_cache_path: str = ".spotify_cache"
 
-    anthropic_api_key: str
-    claude_model: str = "claude-opus-4-6"
+    gemini_api_key: str
+    gemini_model: str = "gemini-2.5-pro"
     agent_max_iterations: int = 10
 
 
