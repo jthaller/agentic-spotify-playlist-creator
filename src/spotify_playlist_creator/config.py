@@ -1,6 +1,5 @@
 """Configuration via pydantic-settings — loads from .env file."""
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,7 +13,7 @@ SPOTIFY_SCOPES = (
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)
 
     spotify_client_id: str
     spotify_client_secret: str
@@ -26,14 +25,7 @@ class Settings(BaseSettings):
 
     allowed_emails: list[str] = []
     # Empty list = open access (default). Set to your Spotify account email(s) to lock down.
-    # In .env:  ALLOWED_EMAILS=you@example.com,friend@example.com
-
-    @field_validator("allowed_emails", mode="before")
-    @classmethod
-    def parse_allowed_emails(cls, v: object) -> object:
-        if isinstance(v, str):
-            return [e.strip() for e in v.split(",") if e.strip()]
-        return v
+    # In .env:  ALLOWED_EMAILS=["you@example.com","friend@example.com"]
 
 
 settings = Settings()
