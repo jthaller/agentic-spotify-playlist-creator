@@ -95,7 +95,7 @@ The app opens at [http://localhost:8501](http://localhost:8501).
 3. Approve the permissions
 4. You're redirected back to `http://localhost:8501` — the app loads automatically
 
-Your token is cached to `.spotify_cache` so you won't need to log in again on restart.
+Your token is held in session state for the duration of the browser session.
 
 ---
 
@@ -179,5 +179,5 @@ The app is live at [agentic-spotify-playlist-creator.streamlit.app](https://agen
 ## Security notes
 
 - `.env` and `.spotify_cache` are gitignored — never commit your credentials
-- The Spotify OAuth token is stored locally on disk and in session state only
+- The Spotify OAuth token is stored in session state only — nothing is written to disk.
 - The app requests these Spotify scopes: `user-read-private`, `user-top-read`, `user-read-recently-played`, `playlist-modify-public`, `playlist-modify-private`
