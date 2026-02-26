@@ -188,7 +188,9 @@ class SpotifyClient:
 
         # Add tracks via /items (not /tracks — the /tracks endpoint is
         # forbidden for newer Spotify apps; spotipy hasn't been updated yet).
-        headers = {**self._sp._get_auth_headers(), "Content-Type": "application/json"}
+        token = self._sp.auth_manager.get_access_token(as_dict=False)
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
         # Normalize IDs — the model sometimes passes full URIs instead of bare IDs
         bare_ids = [
             tid[len("spotify:track:"):] if tid.startswith("spotify:track:") else tid.strip()
