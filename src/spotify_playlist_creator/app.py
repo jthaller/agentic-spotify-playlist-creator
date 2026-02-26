@@ -196,13 +196,8 @@ def _try_get_cached_token() -> dict | None:
 def _initialize_spotify(token_info: dict) -> spotipy.Spotify:
     """Return a cached spotipy instance, creating it once per session."""
     if "sp" not in st.session_state:
-        access_token = (token_info or {}).get("access_token")
-        if not access_token:
-            st.error("Spotify authentication failed — no access token. Please log in again.")
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.stop()
-        st.session_state.sp = spotipy.Spotify(auth=access_token)
+        auth_manager = _get_auth_manager()
+        st.session_state.sp = spotipy.Spotify(auth_manager=auth_manager)
     return st.session_state.sp
 
 
