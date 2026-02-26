@@ -95,7 +95,7 @@ The app opens at [http://localhost:8501](http://localhost:8501).
 3. Approve the permissions
 4. You're redirected back to `http://localhost:8501` — the app loads automatically
 
-Your token is cached to `.spotify_cache` so you won't need to log in again on restart.
+Your token is held in session state for the duration of the browser session.
 
 ---
 
@@ -170,47 +170,14 @@ agentic-spotify-playlist-creator/
 
 ---
 
-## Deployment (Streamlit Community Cloud — free)
+## Hosted version
 
-Streamlit Community Cloud is free forever and provides HTTPS out of the box. The app includes
-an email allowlist (`ALLOWED_EMAILS`) so only authorized Spotify accounts can trigger Gemini API calls.
-
-### Steps
-
-1. Push this repo to GitHub.
-
-2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app** → pick your repo, branch,
-   and set the main file path to `src/spotify_playlist_creator/app.py`.
-
-3. In the **Secrets** text box, paste your credentials — same format as `.env` but update two values:
-   ```
-   SPOTIFY_CLIENT_ID=your_client_id_here
-   SPOTIFY_CLIENT_SECRET=your_client_secret_here
-   SPOTIFY_REDIRECT_URI=https://your-app-name.streamlit.app
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ALLOWED_EMAILS=your-spotify-email@example.com
-   ```
-
-4. In your [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), open your app →
-   **Edit Settings** → add `https://your-app-name.streamlit.app` as a **Redirect URI** → Save.
-
-5. Click **Deploy**. Access is gated by the email allowlist — unauthorized Spotify accounts see a
-   denial screen before any Gemini call is made.
-
-6. Optional backstop: set a Google Cloud billing alert at $5/month to catch unexpected usage.
-
-### Access control
-
-`ALLOWED_EMAILS` is a comma-separated list of Spotify account emails:
-```
-ALLOWED_EMAILS=alice@example.com,bob@example.com
-```
-Leave it empty (`ALLOWED_EMAILS=`) to allow any authenticated Spotify user (the default for local dev).
+The app is live at [agentic-spotify-playlist-creator.streamlit.app](https://agentic-spotify-playlist-creator.streamlit.app/). Access is restricted to whitelisted Spotify accounts — if you're not on the list, you'll see a denial screen after logging in with Spotify.
 
 ---
 
 ## Security notes
 
 - `.env` and `.spotify_cache` are gitignored — never commit your credentials
-- The Spotify OAuth token is stored locally on disk and in session state only
+- The Spotify OAuth token is stored in session state only — nothing is written to disk.
 - The app requests these Spotify scopes: `user-read-private`, `user-top-read`, `user-read-recently-played`, `playlist-modify-public`, `playlist-modify-private`

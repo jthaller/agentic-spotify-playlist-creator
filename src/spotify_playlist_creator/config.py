@@ -13,12 +13,11 @@ SPOTIFY_SCOPES = (
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)
 
     spotify_client_id: str
     spotify_client_secret: str
     spotify_redirect_uri: str = "http://127.0.0.1:8501"
-    spotify_cache_path: str = ".spotify_cache"
 
     gemini_api_key: str
     gemini_model: str = "gemini-2.5-pro"
@@ -26,7 +25,7 @@ class Settings(BaseSettings):
 
     allowed_emails: list[str] = []
     # Empty list = open access (default). Set to your Spotify account email(s) to lock down.
-    # In .env:  ALLOWED_EMAILS=you@example.com,friend@example.com
+    # In .env:  ALLOWED_EMAILS=["you@example.com","friend@example.com"]
 
 
 settings = Settings()
