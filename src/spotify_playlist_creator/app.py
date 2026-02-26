@@ -173,7 +173,7 @@ def _handle_oauth_callback() -> bool:
 
 
 def _try_get_cached_token() -> dict | None:
-    """Return cached token from session_state or disk, if valid."""
+    """Return cached token from session_state or in-memory cache, if valid."""
     auth_manager = _get_auth_manager()
 
     # Already in session_state
@@ -184,7 +184,7 @@ def _try_get_cached_token() -> dict | None:
             st.session_state.token_info = token_info
         return token_info
 
-    # Try disk cache
+    # Try in-memory cache (MemoryCacheHandler)
     token_info = auth_manager.get_cached_token()
     if token_info:
         st.session_state.token_info = token_info
@@ -193,7 +193,7 @@ def _try_get_cached_token() -> dict | None:
     return None
 
 
-def _initialize_spotify(token_info: dict) -> spotipy.Spotify:
+def _initialize_spotify() -> spotipy.Spotify:
     """Return a cached spotipy instance, creating it once per session."""
     if "sp" not in st.session_state:
         auth_manager = _get_auth_manager()
@@ -300,7 +300,7 @@ def _render_header(user_profile: UserProfile) -> None:
 
 
 def _logout() -> None:
-    """Clear all session state and delete the cache file."""
+    """Clear all session state."""
     log_event("SESSION", "/session/logout", status=200)
     logger.info("User logged out — clearing session state")
     for key in list(st.session_state.keys()):
@@ -486,7 +486,7 @@ def main() -> None:
         st.stop()
 
     # State 3: Valid token — show app
-    sp = _initialize_spotify(token_info)
+    sp = _initialize_spotify()
     user_profile, listening_context = _load_user_data(sp)
 
     # Allowlist check — runs after OAuth but before any Gemini call

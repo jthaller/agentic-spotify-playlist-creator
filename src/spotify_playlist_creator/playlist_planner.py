@@ -40,7 +40,6 @@ class PlaylistPlanner:
         )
 
         # Deduplicate while preserving order
-        seen: dict[str, None] = {}
         unique_ids = list(dict.fromkeys(agent_result.track_ids))
 
         if progress_callback:
